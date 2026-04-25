@@ -9,24 +9,29 @@ import (
 )
 
 type Config struct {
-	AppPort          string
-	AppEnv           string
-	JWTSecret        string
-	AccessTokenTTLMin int
+	AppPort            string
+	AppEnv             string
+	JWTSecret          string
+	AccessTokenTTLMin  int
 	RefreshTokenTTLDays int
-	DBPath           string
-	FrontendOrigin   string
-	CookieSecure     bool
-	RedisAddr        string
-	RedisPassword    string
-	RedisDB          int
-	SMTPHost         string
-	SMTPPort         int
-	SMTPUser         string
-	SMTPPass         string
-	FromEmail        string
-	RajaOngkirAPIKey string
-	RajaOngkirBase   string
+	DBHost             string
+	DBPort             string
+	DBUser             string
+	DBPassword         string
+	DBName             string
+	DBSSLMode          string
+	FrontendOrigin     string
+	CookieSecure       bool
+	RedisAddr          string
+	RedisPassword      string
+	RedisDB            int
+	SMTPHost           string
+	SMTPPort           int
+	SMTPUser           string
+	SMTPPass           string
+	FromEmail          string
+	RajaOngkirAPIKey   string
+	RajaOngkirBase     string
 }
 
 func Load() *Config {
@@ -53,24 +58,29 @@ func Load() *Config {
 	}
 
 	cfg := &Config{
-		AppPort:          getEnv("APP_PORT", "8080"),
-		AppEnv:           getEnv("APP_ENV", "development"),
-		JWTSecret:        getEnv("JWT_SECRET", "super-secret-change-me"),
-		AccessTokenTTLMin: accessTTL,
+		AppPort:            getEnv("APP_PORT", "8080"),
+		AppEnv:             getEnv("APP_ENV", "development"),
+		JWTSecret:          getEnv("JWT_SECRET", "super-secret-change-me"),
+		AccessTokenTTLMin:  accessTTL,
 		RefreshTokenTTLDays: refreshTTL,
-		DBPath:           getEnv("DB_PATH", "./ecommerce.db"),
-		FrontendOrigin:   getEnv("FRONTEND_ORIGIN", "http://localhost:3000"),
-		CookieSecure:     getEnv("COOKIE_SECURE", "false") == "true",
-		RedisAddr:        getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:    getEnv("REDIS_PASSWORD", ""),
-		RedisDB:          redisDB,
-		SMTPHost:         getEnv("SMTP_HOST", ""),
-		SMTPPort:         smtpPort,
-		SMTPUser:         getEnv("SMTP_USER", ""),
-		SMTPPass:         getEnv("SMTP_PASS", ""),
-		FromEmail:        getEnv("FROM_EMAIL", "no-reply@ecommerce.local"),
-		RajaOngkirAPIKey: getEnv("RAJAONGKIR_API_KEY", ""),
-		RajaOngkirBase:   getEnv("RAJAONGKIR_BASE_URL", "https://api.rajaongkir.com/starter"),
+		DBHost:             getEnv("DB_HOST", "localhost"),
+		DBPort:             getEnv("DB_PORT", "5432"),
+		DBUser:             getEnv("DB_USER", "postgres"),
+		DBPassword:         getEnv("DB_PASSWORD", "postgres"),
+		DBName:             getEnv("DB_NAME", "ecommerce_auth"),
+		DBSSLMode:          getEnv("DB_SSLMODE", "disable"),
+		FrontendOrigin:     getEnv("FRONTEND_ORIGIN", "http://localhost:5173"),
+		CookieSecure:       getEnv("COOKIE_SECURE", "false") == "true",
+		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
+		RedisDB:            redisDB,
+		SMTPHost:           getEnv("SMTP_HOST", ""),
+		SMTPPort:           smtpPort,
+		SMTPUser:           getEnv("SMTP_USER", ""),
+		SMTPPass:           getEnv("SMTP_PASS", ""),
+		FromEmail:          getEnv("FROM_EMAIL", "no-reply@ecommerce.local"),
+		RajaOngkirAPIKey:   getEnv("RAJAONGKIR_API_KEY", ""),
+		RajaOngkirBase:     getEnv("RAJAONGKIR_BASE_URL", "https://api.rajaongkir.com/starter"),
 	}
 
 	if cfg.JWTSecret == "" {

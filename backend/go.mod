@@ -8,7 +8,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.6.1
+	github.com/spf13/viper v1.19.0
 	golang.org/x/crypto v0.24.0
-	gorm.io/driver/sqlite v1.5.6
+	gorm.io/driver/postgres v1.5.9
 	gorm.io/gorm v1.25.10
 )
