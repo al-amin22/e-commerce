@@ -21,6 +21,7 @@ type User struct {
 	PasswordHash string    `gorm:"not null" json:"-"`
 	Role         UserRole  `gorm:"size:20;not null;default:buyer" json:"role"`
 	IsVerified   bool      `gorm:"default:false" json:"is_verified"`
+	IsActive     bool      `gorm:"default:true" json:"is_active"`
 	Addresses    []Address `json:"addresses,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`

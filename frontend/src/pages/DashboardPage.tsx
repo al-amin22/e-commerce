@@ -1,9 +1,9 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.tsx";
+import { useAuth } from "../context/AuthContext";
 
 export default function DashboardPage() {
-  const { user, loading, me, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -11,12 +11,6 @@ export default function DashboardPage() {
       navigate("/login", { replace: true });
     }
   }, [loading, user, navigate]);
-
-  useEffect(() => {
-    if (!user) {
-      me();
-    }
-  }, [user, me]);
 
   if (loading || !user) {
     return <main className="p-6">Loading...</main>;

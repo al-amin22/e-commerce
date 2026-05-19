@@ -146,7 +146,7 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	deviceID := resolveDeviceID(c)
-	accessToken, refreshToken, refreshJTI, err := h.issueTokenPair(c.Request.Context(), user.ID, user.Role, deviceID)
+	accessToken, refreshToken, _, err := h.issueTokenPair(c.Request.Context(), user.ID, user.Role, deviceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed generating token pair"})
 		return
@@ -155,9 +155,9 @@ func (h *Handler) Login(c *gin.Context) {
 	h.setAuthCookies(c, accessToken, refreshToken, deviceID)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":     "login success",
-		"refresh_jti": refreshJTI,
-		"user":        userPayload(user),
+		"message":      "login success",
+		"access_token": accessToken,
+		"user":         userPayload(user),
 	})
 }
 

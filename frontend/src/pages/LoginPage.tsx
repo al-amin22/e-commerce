@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.tsx";
+import { useAuth } from "../context/AuthContext";
 
 type LoginForm = {
   email: string;
@@ -32,6 +32,9 @@ export default function LoginPage() {
     <main className="min-h-screen bg-slate-50 p-4">
       <div className="mx-auto mt-14 max-w-md rounded-xl border bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-bold">Login</h1>
+        <p className="mt-2 text-sm text-slate-500">
+          Demo akun: demo@example.com / password123
+        </p>
         <form className="mt-5 space-y-4" onSubmit={handleSubmit(onSubmit)}>
           <div>
             <input
@@ -64,7 +67,10 @@ export default function LoginPage() {
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
 
         <p className="mt-4 text-sm text-slate-600">
-          Belum punya akun? <Link className="text-blue-600" to="/register">Daftar</Link>
+          Belum punya akun?{" "}
+          <Link className="text-blue-600" to="/register">
+            Daftar
+          </Link>
         </p>
       </div>
     </main>
