@@ -9,26 +9,39 @@ Tujuan tahap ini: sistem login aman dengan hash password, JWT access/refresh tok
 
 ## Struktur Backend (Clean Architecture)
 
-- `backend/cmd/api/main.go` → entrypoint server (jalankan Gin di port 8080)
-- `backend/internal/domain` → entity utama (`User`, `Product`)
-- `backend/internal/repository` → akses data / query GORM
-- `backend/internal/service` → business logic
-- `backend/internal/handler` → layer HTTP (request/response)
+- `backend/cmd/api/main.go` dan `backend/cmd/server/main.go` → thin entrypoint yang memanggil shared bootstrap
+- `backend/cmd/server/main.go` → entrypoint resmi
+- `backend/cmd/api/main.go` → entrypoint alternatif untuk kompatibilitas
+- `backend/internal/app` → bootstrap aplikasi: load config, DB, Redis, service, route
+- `backend/internal/models` → entity/database model utama (`User`, `Address`, `EmailOTP`, `Product`)
+- `backend/internal/dto` → request/response contract API
+- `backend/internal/handlers` → layer HTTP (request/response) untuk fitur utama
+- `backend/internal/services` → business logic terpisah dari handler
+- `backend/internal/response` → helper response JSON yang konsisten
+- `backend/internal/db` → koneksi PostgreSQL + AutoMigrate
+- `backend/internal/cache` → koneksi Redis
 - `backend/internal/middleware` → proteksi JWT untuk route private
-- `backend/pkg/config` → baca `.env` dengan Viper
-- `backend/pkg/database` → koneksi PostgreSQL + AutoMigrate
+- `backend/internal/config` → baca `.env` dan buat DSN
 - `backend/pkg/security` → helper JWT (generate/parse)
-- `backend/pkg/cache` → koneksi Redis
+
+Catatan standar perusahaan:
+- yang aktif dipakai hanya jalur di atas
+
+Detail struktur final ada di [backend/ARCHITECTURE.md](backend/ARCHITECTURE.md).
+Versi yang lebih enterprise-ready ada di [backend/ENTERPRISE_STRUCTURE.md](backend/ENTERPRISE_STRUCTURE.md).
 
 ## Auto-Migrate
 
 Saat server start, sistem otomatis membuat/memperbarui tabel:
 - `users`
+- `email_otps`
+- `addresses`
+- `categories`
 - `products`
 
 Model ada di:
-- [backend/internal/domain/user.go](backend/internal/domain/user.go)
-- [backend/internal/domain/product.go](backend/internal/domain/product.go)
+- [backend/internal/models/product.go](backend/internal/models/product.go)
+- [backend/internal/models/models.go](backend/internal/models/models.go)
 
 ## Konfigurasi Env (Backend)
 
@@ -47,29 +60,26 @@ Copy file [backend/.env.example](backend/.env.example) menjadi `.env`, lalu isi:
 Jalankan dari folder `backend`:
 
 - `go mod tidy`
-- `go run cmd/api/main.go`
+- `go run cmd/server/main.go`
+
+Catatan: `cmd/api/main.go` masih tersedia, tetapi yang resmi dipakai adalah `cmd/server/main.go`.
 
 Jika sukses, server aktif di `http://localhost:8080`.
 
-## Endpoint Tahap 1
+## Endpoint Aktif Saat Ini
 
 - `GET /health`
-- `GET /api/v1/users`
-- `POST /api/v1/users`
-- `GET /api/v1/products`
-- `POST /api/v1/products`
-
-## Endpoint Tahap 2 (Auth)
-
 - `POST /api/v1/auth/register`
+- `POST /api/v1/auth/verify-email`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/auth/me` (protected)
-
-Contoh route protected lain:
-- `GET /api/v1/users`
-- `POST /api/v1/products`
+- `POST /api/v1/bootstrap-admin`
+- `GET /api/v1/addresses` (protected)
+- `POST /api/v1/addresses` (protected)
+- `GET /api/v1/shipping/cost` (protected)
+- `GET /api/v1/admin/users` (protected, admin only)
 
 ## Frontend Setup (React + Vite + TS + Tailwind)
 
@@ -95,7 +105,7 @@ Konsepnya mirip Laravel, beda bahasa dan style:
 
 - Laravel `Controller` ≈ Go `handler`
 - Laravel `Service` ≈ Go `service`
-- Laravel `Model/Eloquent` ≈ Go `domain + repository (GORM)`
+- Laravel `Model/Eloquent` ≈ Go `models + db/repository (GORM)`
 - Laravel `Auth Guard/Middleware` ≈ Go `middleware + JWT`
 - Laravel `.env` ≈ Go `.env` (dibaca Viper)
 

@@ -4,31 +4,20 @@ import (
 	"net/http"
 	"strconv"
 
+	"ecommerce-backend/internal/dto"
 	"ecommerce-backend/internal/models"
+	"ecommerce-backend/internal/response"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
-
-type createAddressRequest struct {
-	Label         string `json:"label" binding:"required"`
-	Recipient     string `json:"recipient" binding:"required"`
-	Phone         string `json:"phone" binding:"required"`
-	AddressLine   string `json:"address_line" binding:"required"`
-	City          string `json:"city" binding:"required"`
-	Province      string `json:"province" binding:"required"`
-	PostalCode    string `json:"postal_code" binding:"required"`
-	CourierCode   string `json:"courier_code"`
-	DestinationID string `json:"destination_id"`
-	IsDefault     bool   `json:"is_default"`
-}
 
 func (h *Handler) CreateAddress(c *gin.Context) {
 	userIDAny, _ := c.Get("user_id")
 	userID := userIDAny.(uuid.UUID)
 
-	var req createAddressRequest
+	var req dto.CreateAddressRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -51,11 +40,11 @@ func (h *Handler) CreateAddress(c *gin.Context) {
 	}
 
 	if err := h.DB.Create(&address).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed creating address"})
+		response.Error(c, http.StatusInternalServerError, "failed creating address")
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "address created", "address": address})
+	response.Success(c, http.StatusCreated, "address created", gin.H{"address": address})
 }
 
 func (h *Handler) ListMyAddresses(c *gin.Context) {
@@ -64,11 +53,11 @@ func (h *Handler) ListMyAddresses(c *gin.Context) {
 
 	var addresses []models.Address
 	if err := h.DB.Where("user_id = ?", userID).Order("is_default DESC, created_at DESC").Find(&addresses).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed getting addresses"})
+		response.Error(c, http.StatusInternalServerError, "failed getting addresses")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"addresses": addresses})
+	response.Success(c, http.StatusOK, "success", gin.H{"addresses": addresses})
 }
 
 func (h *Handler) GetShippingCost(c *gin.Context) {
@@ -78,7 +67,7 @@ func (h *Handler) GetShippingCost(c *gin.Context) {
 
 	weight, err := strconv.Atoi(weightStr)
 	if err != nil || weight <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid weight"})
+		response.Error(c, http.StatusBadRequest, "invalid weight")
 		return
 	}
 
@@ -87,22 +76,22 @@ func (h *Handler) GetShippingCost(c *gin.Context) {
 
 	var address models.Address
 	if err := h.DB.Where("id = ? AND user_id = ?", addressID, userID).First(&address).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "address not found"})
+		response.Error(c, http.StatusNotFound, "address not found")
 		return
 	}
 
 	if address.DestinationID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "destination_id for this address is empty"})
+		response.Error(c, http.StatusBadRequest, "destination_id for this address is empty")
 		return
 	}
 
 	result, err := h.ShipSvc.GetCost(address.DestinationID, weight, courier)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusBadGateway, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response.Success(c, http.StatusOK, "success", gin.H{
 		"address": address,
 		"result":  result,
 	})

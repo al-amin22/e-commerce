@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -96,4 +97,16 @@ func getEnv(key, fallback string) string {
 		return fallback
 	}
 	return val
+}
+
+func (c *Config) DSN() string {
+	return fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=Asia/Jakarta",
+		c.DBHost,
+		c.DBPort,
+		c.DBUser,
+		c.DBPassword,
+		c.DBName,
+		c.DBSSLMode,
+	)
 }

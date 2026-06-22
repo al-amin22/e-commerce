@@ -1,80 +1,36 @@
 package handlers
 
 import (
-	"context"
-	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
+	"ecommerce-backend/internal/dto"
 	"ecommerce-backend/internal/models"
-	"ecommerce-backend/internal/utils"
+	"ecommerce-backend/internal/response"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-type registerRequest struct {
-	Name     string `json:"name" binding:"required,min=3"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6"`
-}
-
-type verifyRequest struct {
-	Email string `json:"email" binding:"required,email"`
-	OTP   string `json:"otp" binding:"required,len=6"`
-}
-
-type loginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
-}
-
-type authResponse struct {
-	User gin.H `json:"user"`
-}
-
 func (h *Handler) Register(c *gin.Context) {
-	var req registerRequest
+	var req dto.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
-	passwordHash, err := utils.HashPassword(req.Password)
+	user, otpCode, err := h.AuthSvc.Register(c.Request.Context(), req.Name, req.Email, req.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed hashing password"})
+		status := http.StatusBadRequest
+		if err.Error() == "email already registered" {
+			status = http.StatusConflict
+		}
+		response.Error(c, status, err.Error())
 		return
 	}
 
-	user := models.User{
-		Name:         req.Name,
-		Email:        req.Email,
-		PasswordHash: passwordHash,
-		Role:         models.RoleBuyer,
-		IsVerified:   false,
-	}
-
-	if err := h.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusConflict, gin.H{"message": "email already registered"})
-		return
-	}
-
-	otype := models.EmailOTP{
-		Email:     req.Email,
-		Code:      utils.GenerateOTP(6),
-		ExpiresAt: time.Now().Add(10 * time.Minute),
-	}
-	if err := h.DB.Create(&otype).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed creating otp"})
-		return
-	}
-
-	h.EmailSvc.SendOTPAsync(req.Email, otype.Code)
-
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "registration successful, check your email for otp",
+	h.EmailSvc.SendOTPAsync(req.Email, otpCode)
+	response.Success(c, http.StatusCreated, "registration successful, check your email for otp", gin.H{
 		"user": gin.H{
 			"id":    user.ID,
 			"name":  user.Name,
@@ -85,86 +41,48 @@ func (h *Handler) Register(c *gin.Context) {
 }
 
 func (h *Handler) VerifyEmail(c *gin.Context) {
-	var req verifyRequest
+	var req dto.VerifyEmailRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
-
-	var otp models.EmailOTP
-	err := h.DB.Where("email = ? AND code = ? AND used = ?", req.Email, req.OTP, false).
-		Order("created_at DESC").
-		First(&otp).Error
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid otp"})
+	if err := h.AuthSvc.VerifyEmail(c.Request.Context(), req.Email, req.OTP); err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	if otp.ExpiresAt.Before(time.Now()) {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "otp expired"})
-		return
-	}
-
-	if err := h.DB.Model(&otp).Update("used", true).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed updating otp"})
-		return
-	}
-
-	if err := h.DB.Model(&models.User{}).Where("email = ?", req.Email).Update("is_verified", true).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed verifying user"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "email verified successfully"})
+	response.Success(c, http.StatusOK, "email verified successfully", nil)
 }
 
 func (h *Handler) Login(c *gin.Context) {
-	var req loginRequest
+	var req dto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-		return
-	}
-
-	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
-
-	var user models.User
-	if err := h.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid credentials"})
-		return
-	}
-
-	if err := utils.CheckPassword(user.PasswordHash, req.Password); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid credentials"})
-		return
-	}
-
-	if !user.IsVerified {
-		c.JSON(http.StatusForbidden, gin.H{"message": "email not verified"})
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	deviceID := resolveDeviceID(c)
-	accessToken, refreshToken, _, err := h.issueTokenPair(c.Request.Context(), user.ID, user.Role, deviceID)
+	user, accessToken, refreshToken, err := h.AuthSvc.Login(c.Request.Context(), req.Email, req.Password, deviceID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed generating token pair"})
+		status := http.StatusUnauthorized
+		if err.Error() == "email not verified" {
+			status = http.StatusForbidden
+		}
+		response.Error(c, status, err.Error())
 		return
 	}
 
 	h.setAuthCookies(c, accessToken, refreshToken, deviceID)
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":      "login success",
+	response.Success(c, http.StatusOK, "login success", gin.H{
 		"access_token": accessToken,
-		"user":         userPayload(user),
+		"user":         userPayload(*user),
 	})
 }
 
 func (h *Handler) Refresh(c *gin.Context) {
 	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil || refreshToken == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "missing refresh token"})
+		response.Error(c, http.StatusUnauthorized, "missing refresh token")
 		return
 	}
 
@@ -173,27 +91,14 @@ func (h *Handler) Refresh(c *gin.Context) {
 		deviceID = cookieDeviceID
 	}
 
-	claims, err := utils.ParseToken(refreshToken, h.Config.JWTSecret)
-	if err != nil || claims.Type != "refresh" || claims.JTI == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "invalid refresh token"})
-		return
-	}
-
-	if ok := h.isRefreshTokenActive(c.Request.Context(), claims.UserID.String(), claims.JTI, deviceID); !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "refresh token revoked"})
-		return
-	}
-
-	h.revokeRefreshToken(c.Request.Context(), claims.UserID.String(), claims.JTI, deviceID)
-
-	accessToken, newRefreshToken, _, err := h.issueTokenPair(c.Request.Context(), claims.UserID, claims.Role, deviceID)
+	accessToken, newRefreshToken, err := h.AuthSvc.Refresh(c.Request.Context(), refreshToken, deviceID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "failed rotating token"})
+		response.Error(c, http.StatusUnauthorized, err.Error())
 		return
 	}
 
 	h.setAuthCookies(c, accessToken, newRefreshToken, deviceID)
-	c.JSON(http.StatusOK, gin.H{"message": "token refreshed"})
+	response.Success(c, http.StatusOK, "token refreshed", nil)
 }
 
 func (h *Handler) Logout(c *gin.Context) {
@@ -203,26 +108,24 @@ func (h *Handler) Logout(c *gin.Context) {
 	}
 
 	if refreshToken, err := c.Cookie("refresh_token"); err == nil && refreshToken != "" {
-		if claims, parseErr := utils.ParseToken(refreshToken, h.Config.JWTSecret); parseErr == nil && claims.JTI != "" {
-			h.revokeRefreshToken(c.Request.Context(), claims.UserID.String(), claims.JTI, deviceID)
-		}
+		_ = h.AuthSvc.Logout(c.Request.Context(), refreshToken, deviceID)
 	}
 
 	h.clearAuthCookies(c)
-	c.JSON(http.StatusOK, gin.H{"message": "logout success"})
+	response.Success(c, http.StatusOK, "logout success", nil)
 }
 
 func (h *Handler) Me(c *gin.Context) {
 	userIDAny, _ := c.Get("user_id")
 	userID := userIDAny.(uuid.UUID)
 
-	var user models.User
-	if err := h.DB.Select("id", "name", "email", "role", "is_verified", "created_at", "updated_at").Where("id = ?", userID.String()).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "user not found"})
+	user, err := h.AuthSvc.GetUserByID(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, http.StatusUnauthorized, "user not found")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"user": userPayload(user)})
+	response.Success(c, http.StatusOK, "success", gin.H{"user": userPayload(*user)})
 }
 
 func userPayload(user models.User) gin.H {
@@ -240,6 +143,7 @@ func resolveDeviceID(c *gin.Context) string {
 	if deviceID != "" {
 		return deviceID
 	}
+
 	ua := strings.TrimSpace(c.GetHeader("User-Agent"))
 	if ua == "" {
 		return "unknown-device"
@@ -248,56 +152,6 @@ func resolveDeviceID(c *gin.Context) string {
 		return ua[:80]
 	}
 	return ua
-}
-
-func refreshTokenKey(userID, jti string) string {
-	return fmt.Sprintf("refresh:%s:%s", userID, jti)
-}
-
-func refreshDeviceKey(userID, deviceID string) string {
-	return fmt.Sprintf("refresh_device:%s:%s", userID, deviceID)
-}
-
-func (h *Handler) issueTokenPair(ctx context.Context, userID uuid.UUID, role models.UserRole, deviceID string) (string, string, string, error) {
-	accessTTL := time.Duration(h.Config.AccessTokenTTLMin) * time.Minute
-	refreshTTL := time.Duration(h.Config.RefreshTokenTTLDays) * 24 * time.Hour
-
-	accessToken, err := utils.CreateAccessToken(userID, role, h.Config.JWTSecret, accessTTL)
-	if err != nil {
-		return "", "", "", err
-	}
-
-	refreshToken, jti, err := utils.CreateRefreshToken(userID, role, h.Config.JWTSecret, refreshTTL)
-	if err != nil {
-		return "", "", "", err
-	}
-
-	if prevJTI, err := h.Redis.Get(ctx, refreshDeviceKey(userID.String(), deviceID)).Result(); err == nil && prevJTI != "" {
-		h.Redis.Del(ctx, refreshTokenKey(userID.String(), prevJTI))
-	}
-
-	if err := h.Redis.Set(ctx, refreshTokenKey(userID.String(), jti), deviceID, refreshTTL).Err(); err != nil {
-		return "", "", "", err
-	}
-
-	if err := h.Redis.Set(ctx, refreshDeviceKey(userID.String(), deviceID), jti, refreshTTL).Err(); err != nil {
-		return "", "", "", err
-	}
-
-	return accessToken, refreshToken, jti, nil
-}
-
-func (h *Handler) isRefreshTokenActive(ctx context.Context, userID, jti, deviceID string) bool {
-	storedDeviceID, err := h.Redis.Get(ctx, refreshTokenKey(userID, jti)).Result()
-	if err != nil {
-		return false
-	}
-	return storedDeviceID == deviceID
-}
-
-func (h *Handler) revokeRefreshToken(ctx context.Context, userID, jti, deviceID string) {
-	h.Redis.Del(ctx, refreshTokenKey(userID, jti))
-	h.Redis.Del(ctx, refreshDeviceKey(userID, deviceID))
 }
 
 func (h *Handler) setAuthCookies(c *gin.Context, accessToken, refreshToken, deviceID string) {
